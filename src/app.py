@@ -11,16 +11,20 @@ Para executar localmente:
 
 from __future__ import annotations
 
-import logging
 import datetime
+import logging
 
 import pandas as pd
+import pytz
 import requests
 import streamlit as st
 
 from scraper import get_monitoramento, MonitoramentoError
 
+# -------------------------------------------------------------------------
 # Configuração de logging
+# -------------------------------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
@@ -33,7 +37,12 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------------
 
 def carregar_dados(url: str) -> tuple[pd.DataFrame, dict]:
-    """Wrapper simples para chamar o scraper e tratar erros."""
+    """
+    Chama o scraper para obter a tabela e o resumo de monitoramento.
+
+    :param url: URL da página de monitoramento.
+    :return: (DataFrame, dict_resumo)
+    """
     return get_monitoramento(url)
 
 
@@ -78,20 +87,22 @@ def main() -> None:
 
     # URLs padrão
     url_monitoramento_padrao = "http://45.71.160.173/monitoramento/"
-    url_atualiza_status_padrao = "http://45.71.160.173/monitoramento/atualiza_status.php"
+    url_atualiza_status_padrao = (
+        "http://45.71.160.173/monitoramento/atualiza_status.php"
+    )
 
-    # Campos de entrada para as URLs
+    # Campos de entrada para as URLs (configuráveis na interface)
     url_monitoramento = st.text_input(
         "URL da página de monitoramento:",
-        url_monitoramento_padrao
+        url_monitoramento_padrao,
     )
 
     url_atualiza_status = st.text_input(
         "URL de atualização de status:",
-        url_atualiza_status_padrao
+        url_atualiza_status_padrao,
     )
 
-    # Inicialização de sessão
+    # Estado da sessão
     if "df" not in st.session_state:
         st.session_state["df"] = None
     if "resumo" not in st.session_state:
@@ -101,42 +112,49 @@ def main() -> None:
     if "ultima_execucao" not in st.session_state:
         st.session_state["ultima_execucao"] = None
 
-    # Botão principal
+    # Botão principal: executa as 2 etapas
     if st.button("Atualizar dados agora"):
         st.subheader("Processando atualização...")
-        
+
         # 1) Atualização do status no servidor
         with st.spinner("Etapa 1/2: Atualizando status no servidor..."):
             ok, msg = chamar_atualiza_status(url_atualiza_status)
             st.session_state["ultima_msg_atualiza"] = msg
 
         if ok:
-            st.success("Etapa 1/2 concluída: Status atualizado.")
+            st.success("Etapa 1/2 concluída: status atualizado no servidor.")
         else:
-            st.error("Falha na etapa 1/2: Não foi possível atualizar o status.")
+            st.error("Falha na etapa 1/2: não foi possível atualizar o status.")
             st.write(msg)
 
         st.info(f"Mensagem do servidor: {msg}")
 
-        # 2) Carregar dados do monitoramento
+        # 2) Carregar dados de monitoramento
         with st.spinner("Etapa 2/2: Carregando dados atualizados..."):
             try:
                 df, resumo = carregar_dados(url_monitoramento)
                 st.session_state["df"] = df
                 st.session_state["resumo"] = resumo
-                st.session_state["ultima_execucao"] = datetime.datetime.now()
-                st.success("Etapa 2/2 concluída: Dados carregados.")
+
+                # Horário da última execução em America/Sao_Paulo (UTC-3)
+                tz = pytz.timezone("America/Sao_Paulo")
+                st.session_state["ultima_execucao"] = datetime.datetime.now(tz)
+
+                st.success("Etapa 2/2 concluída: dados de monitoramento carregados.")
             except MonitoramentoError as exc:
                 st.error(f"Erro ao carregar dados do monitoramento: {exc}")
 
-    # Carregamento inicial automático
+    # Carregamento inicial automático (quando abre o app)
     if st.session_state["df"] is None:
         try:
             df, resumo = carregar_dados(url_monitoramento)
             st.session_state["df"] = df
             st.session_state["resumo"] = resumo
         except MonitoramentoError:
-            st.warning("Clique em 'Atualizar dados agora' para iniciar.")
+            st.warning(
+                "Não foi possível carregar os dados automaticamente. "
+                "Clique em 'Atualizar dados agora'."
+            )
 
     df = st.session_state["df"]
     resumo = st.session_state["resumo"]
@@ -144,12 +162,12 @@ def main() -> None:
     if df is None or resumo is None:
         st.stop()
 
-    # Mostrar última atualização
+    # Mostrar horário da última atualização (já em fuso horário do Brasil)
     if st.session_state["ultima_execucao"]:
         dt = st.session_state["ultima_execucao"].strftime("%d/%m/%Y %H:%M:%S")
         st.caption(f"Última atualização completa em: {dt}")
 
-    # Métricas principais
+    # Resumo com métricas
     st.subheader("Resumo do Monitoramento")
 
     col1, col2, col3 = st.columns(3)
@@ -159,11 +177,14 @@ def main() -> None:
 
     st.markdown("---")
 
-    # Mensagem retornada pelo servidor PHP
+    # Mensagem retornada pelo servidor PHP na última execução
     if st.session_state["ultima_msg_atualiza"]:
-        st.info(f"Mensagem da última atualização: {st.session_state['ultima_msg_atualiza']}")
+        st.info(
+            f"Mensagem da última atualização: "
+            f"{st.session_state['ultima_msg_atualiza']}"
+        )
 
-    # Filtro de carro
+    # Filtro de carro + tabela
     st.subheader("Tabela de Carros")
     filtro_carro = st.text_input("Filtrar por carro (contém):")
 
