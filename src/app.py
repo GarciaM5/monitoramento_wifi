@@ -27,7 +27,7 @@ from scraper import get_monitoramento, MonitoramentoError
 # CONFIGURAÇÕES
 # -------------------------------------------------------------------------
 
-# Agora refletindo a frota real
+# Frota total (meta do gauge de frota)
 META_TOTAL_CARROS = 199
 
 logging.basicConfig(
@@ -61,9 +61,10 @@ def chamar_atualiza_status(url_atualiza: str) -> tuple[bool, str]:
 def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
     """
     Cria um gauge com faixas:
-    0–25  -> verde
-    25–65 -> amarelo
+    0–25   -> verde
+    25–65  -> amarelo
     65–100 -> vermelho
+    E marcações (ticks) de 10 em 10.
     """
     fig = go.Figure(
         go.Indicator(
@@ -72,12 +73,12 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
             number={"suffix": "%"},
             title={"text": title},
             gauge={
-                "axis": {"range": [0, 100]},
+                "axis": {"range": [0, 100], "dtick": 10},
                 "bar": {"color": "white"},
                 "steps": [
-                    {"range": [0, 25], "color": "#198754"},   # verde
-                    {"range": [25, 65], "color": "#FFC107"},  # amarelo
-                    {"range": [65, 100], "color": "#8B0000"}, # vermelho
+                    {"range": [0, 25], "color": "#198754"},    # verde
+                    {"range": [25, 65], "color": "#FFC107"},   # amarelo
+                    {"range": [65, 100], "color": "#8B0000"},  # vermelho
                 ],
             },
         )
@@ -127,7 +128,9 @@ def main() -> None:
 
     # Botão principal
     if st.button("Atualizar dados agora"):
-        st.subheader("Processando...")
+        # Placeholder para o texto de status
+        status_placeholder = st.empty()
+        status_placeholder.subheader("Processando...")
 
         # Etapa 1 – Atualizar status no servidor
         with st.spinner("Etapa 1/2: Atualizando status..."):
@@ -153,6 +156,9 @@ def main() -> None:
                 st.success("Dados carregados com sucesso.")
             except MonitoramentoError as exc:
                 st.error(f"Erro ao buscar dados: {exc}")
+
+        # Ao final de todas as etapas, muda de "Processando..." para "Processado"
+        status_placeholder.subheader("Processado")
 
     df = st.session_state["df"]
     resumo = st.session_state["resumo"]
@@ -181,7 +187,7 @@ def main() -> None:
 
     col1, col2, col3 = st.columns(3)
 
-    # 1) Total monitorado em relação à frota
+    # 1) Total Monitorado em Relação à Frota
     col1.plotly_chart(
         make_gauge_percent("Total Monitorado em Relação à Frota", pct_total_meta),
         use_container_width=True,
