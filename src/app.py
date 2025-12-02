@@ -27,7 +27,8 @@ from scraper import get_monitoramento, MonitoramentoError
 # CONFIGURAÇÕES
 # -------------------------------------------------------------------------
 
-META_TOTAL_CARROS = 200  # Ajuste se quiser outra meta para o gauge total
+# Agora refletindo a frota real
+META_TOTAL_CARROS = 199
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +59,12 @@ def chamar_atualiza_status(url_atualiza: str) -> tuple[bool, str]:
 
 
 def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
+    """
+    Cria um gauge com faixas:
+    0–25  -> verde
+    25–65 -> amarelo
+    65–100 -> vermelho
+    """
     fig = go.Figure(
         go.Indicator(
             mode="gauge+number",
@@ -68,9 +75,9 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
                 "axis": {"range": [0, 100]},
                 "bar": {"color": "white"},
                 "steps": [
-                    {"range": [0, 60], "color": "#8B0000"},
-                    {"range": [60, 85], "color": "#FFC107"},
-                    {"range": [85, 100], "color": "#198754"},
+                    {"range": [0, 25], "color": "#198754"},   # verde
+                    {"range": [25, 65], "color": "#FFC107"},  # amarelo
+                    {"range": [65, 100], "color": "#8B0000"}, # vermelho
                 ],
             },
         )
@@ -159,7 +166,7 @@ def main() -> None:
         st.caption(f"Última atualização completa em: {dt}")
 
     # ---------------------------------------------------------------------
-    # INDICADORES GAUGE (SEM HEALTH SCORE E SEM BARRAS)
+    # INDICADORES GAUGE
     # ---------------------------------------------------------------------
 
     st.subheader("Indicadores Gauge")
@@ -174,20 +181,23 @@ def main() -> None:
 
     col1, col2, col3 = st.columns(3)
 
+    # 1) Total monitorado em relação à frota
     col1.plotly_chart(
-        make_gauge_percent("Total monitorado vs meta", pct_total_meta),
+        make_gauge_percent("Total Monitorado em Relação à Frota", pct_total_meta),
         use_container_width=True,
     )
-    col1.write(f"{total} de {META_TOTAL_CARROS} veículos (meta)")
+    col1.write(f"{total} de {META_TOTAL_CARROS} veículos (frota)")
 
+    # 2) Carros Funcionando
     col2.plotly_chart(
-        make_gauge_percent("Carros funcionando", pct_funcionando),
+        make_gauge_percent("Carros Funcionando", pct_funcionando),
         use_container_width=True,
     )
     col2.write(f"{funcionando} de {total} veículos")
 
+    # 3) Carros Inoperantes
     col3.plotly_chart(
-        make_gauge_percent("Carros não funcionando", pct_nok),
+        make_gauge_percent("Carros Inoperantes", pct_nok),
         use_container_width=True,
     )
     col3.write(f"{nao_funcionando} de {total} veículos")
