@@ -68,9 +68,9 @@ def chamar_atualiza_status(url_atualiza: str) -> tuple[bool, str]:
 
 def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
     """
-    Gauge com DUAS CORES APENAS:
-    - Fundo inteiro vermelho
-    - Barra preenchida VERDE ocupando 100% da faixa
+    Gauge com DUAS CORES:
+    - Fundo inteiro vermelho vivo
+    - Barra preenchida VERDE viva ocupando 100% da faixa
     - Ticks a cada 10
     """
     fig = go.Figure(
@@ -81,14 +81,14 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
             title={"text": title},
             gauge={
                 "axis": {"range": [0, 100], "dtick": 10},
-                # Barra de progresso (verde) ocupa toda a largura
+                # Barra de progresso (verde vivo) ocupa toda a largura
                 "bar": {
-                    "color": "#198754",
-                    "thickness": 1.0,  # 1.0 = ocupa toda a área útil do arco
+                    "color": "#00FF57",   # verde bem vivo
+                    "thickness": 1.0,     # 1.0 = ocupa toda a área útil do arco
                 },
-                # Fundo 100% vermelho
+                # Fundo 100% vermelho vivo
                 "steps": [
-                    {"range": [0, 100], "color": "#8B0000"},
+                    {"range": [0, 100], "color": "#FF0000"},
                 ],
                 "borderwidth": 0,
             },
@@ -104,10 +104,12 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
 
 
 def color_status(val: str) -> str:
-    """Aplica cor na coluna Status da tabela."""
+    """Aplica cor na coluna Status da tabela com tons mais vivos."""
     if isinstance(val, str) and val.lower().startswith("funcionando"):
-        return "background-color:#198754;color:white;"
-    return "background-color:#842029;color:white;"
+        # Verde bem vivo, texto escuro para contraste
+        return "background-color:#00FF57;color:#000000;font-weight:bold;"
+    # Vermelho vivo para inoperantes
+    return "background-color:#FF0000;color:white;font-weight:bold;"
 
 
 # -------------------------------------------------------------------------
@@ -115,9 +117,9 @@ def color_status(val: str) -> str:
 # -------------------------------------------------------------------------
 
 def main() -> None:
-    st.set_page_config(page_title="Monitoramento Wi-Fi", layout="wide")
+    st.set_page_config(page_title="Monitoramento Wi-Fi", page_icon="🚍", layout="wide")
 
-    st.title("Monitoramento de Carros - Wi-Fi")
+    st.title("🚍 Monitoramento de Carros - Wi-Fi")
     st.write("Dashboard para consulta e atualização do monitoramento de carros via Wi-Fi.")
 
     # URLs
@@ -142,7 +144,6 @@ def main() -> None:
 
     # Botão principal
     if st.button("Atualizar dados agora"):
-        # Placeholder para o texto de status
         status_placeholder = st.empty()
         status_placeholder.subheader("Processando...")
 
@@ -171,7 +172,6 @@ def main() -> None:
             except MonitoramentoError as exc:
                 st.error(f"Erro ao buscar dados: {exc}")
 
-        # Ao final de todas as etapas, muda de "Processando..." para "Processado"
         status_placeholder.subheader("Processado")
 
     df = st.session_state["df"]
@@ -180,7 +180,6 @@ def main() -> None:
     if df is None or resumo is None:
         st.stop()
 
-    # Última atualização
     if st.session_state["ultima_execucao"]:
         dt = st.session_state["ultima_execucao"].strftime("%d/%m/%Y %H:%M:%S")
         st.caption(f"Última atualização completa em: {dt}")
@@ -201,21 +200,21 @@ def main() -> None:
 
     col1, col2, col3 = st.columns(3)
 
-    # 1) Carros Funcionando
+    # Carros Funcionando
     col1.plotly_chart(
         make_gauge_percent("Carros Funcionando", pct_funcionando),
         use_container_width=True,
     )
     col1.write(f"{funcionando} de {total} veículos")
 
-    # 2) Carros Inoperantes
+    # Carros Inoperantes
     col2.plotly_chart(
         make_gauge_percent("Carros Inoperantes", pct_nok),
         use_container_width=True,
     )
     col2.write(f"{nao_funcionando} de {total} veículos")
 
-    # 3) Total Monitorado em Relação à Frota
+    # Total Monitorado em Relação à Frota
     col3.plotly_chart(
         make_gauge_percent("Total Monitorado em Relação à Frota", pct_total_meta),
         use_container_width=True,
@@ -252,6 +251,15 @@ def main() -> None:
 
     styled = df_exibe.style.applymap(color_status, subset=["Status"])
     st.dataframe(styled, use_container_width=True, height=500)
+
+    # ---------------------------------------------------------------------
+    # RODAPÉ / AUTORIA
+    # ---------------------------------------------------------------------
+
+    st.markdown("---")
+    st.caption(
+        "Desenvolvido por Matheus Galhardo Garcia · Monitoramento de Carros Wi-Fi"
+    )
 
 
 if __name__ == "__main__":
