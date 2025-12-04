@@ -85,7 +85,7 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
                 # Barra de progresso (verde vivo) ocupa toda a largura
                 "bar": {
                     "color": "#00FF57",   # verde bem vivo
-                    "thickness": 1.0,     # 1.0 = ocupa toda a área útil do arco
+                    "thickness": 1.0,     # ocupa toda a área útil do arco
                 },
                 # Fundo 100% vermelho vivo
                 "steps": [
@@ -182,6 +182,8 @@ def main() -> None:
         st.session_state["ultima_execucao"] = None
     if "historico_operantes" not in st.session_state:
         st.session_state["historico_operantes"] = {}
+    if "filtro_status" not in st.session_state:
+        st.session_state["filtro_status"] = "Todos"
 
     # Botão principal
     if st.button("Atualizar dados agora"):
@@ -268,6 +270,22 @@ def main() -> None:
     col3.write(f"{total} de {META_TOTAL_CARROS} veículos (frota)")
 
     # ---------------------------------------------------------------------
+    # FILTRO RÁPIDO POR STATUS (EMULA “CLIQUE NO GAUGE”)
+    # ---------------------------------------------------------------------
+
+    st.subheader("Filtro rápido por status")
+
+    filtro_status = st.radio(
+        "Selecione o conjunto de veículos a exibir na tabela:",
+        ("Todos", "Somente funcionando", "Somente inoperantes"),
+        index=("Todos", "Somente funcionando", "Somente inoperantes").index(
+            st.session_state["filtro_status"]
+        ),
+        horizontal=True,
+    )
+    st.session_state["filtro_status"] = filtro_status
+
+    # ---------------------------------------------------------------------
     # GRÁFICO DE LINHA – HISTÓRICO DE VEÍCULOS FUNCIONANDO
     # ---------------------------------------------------------------------
 
@@ -275,12 +293,13 @@ def main() -> None:
 
     df_hist = construir_dataframe_historico()
     if df_hist is not None and not df_hist.empty:
-        # Usa Data como eixo x
         df_hist_plot = df_hist.set_index("Data")
         st.line_chart(df_hist_plot, height=300)
     else:
-        st.info("Ainda não há histórico suficiente para exibir o gráfico. "
-                "Clique em 'Atualizar dados agora' para começar a registrar.")
+        st.info(
+            "Ainda não há histórico suficiente para exibir o gráfico. "
+            "Clique em 'Atualizar dados agora' para começar a registrar."
+        )
 
     # ---------------------------------------------------------------------
     # MENSAGEM DO SERVIDOR
@@ -298,13 +317,25 @@ def main() -> None:
 
     st.subheader("Tabela de Carros")
 
-    filtro = st.text_input("Filtrar por carro:")
+    filtro_texto = st.text_input("Filtrar por carro:")
 
     df_exibe = df.copy()
 
-    if filtro.strip():
+    # Aplica filtro de status conforme seleção
+    filtro_status = st.session_state.get("filtro_status", "Todos")
+    if "Status" in df_exibe.columns:
+        status_series = df_exibe["Status"].astype(str).str.lower()
+        if filtro_status == "Somente funcionando":
+            df_exibe = df_exibe[status_series.str.startswith("funcionando")]
+        elif filtro_status == "Somente inoperantes":
+            df_exibe = df_exibe[~status_series.str.startswith("funcionando")]
+
+    # Filtro por texto do carro
+    if filtro_texto.strip():
         df_exibe = df_exibe[
-            df_exibe["Carro"].str.contains(filtro, case=False, na=False)
+            df_exibe["Carro"].astype(str).str.contains(
+                filtro_texto, case=False, na=False
+            )
         ]
 
     if "Último Acesso" in df_exibe.columns:
