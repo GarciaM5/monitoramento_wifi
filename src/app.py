@@ -42,10 +42,17 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------------
 
 def carregar_dados(url: str) -> tuple[pd.DataFrame, dict]:
+    """Chama o scraper e retorna DataFrame + resumo."""
     return get_monitoramento(url)
 
 
 def chamar_atualiza_status(url_atualiza: str) -> tuple[bool, str]:
+    """
+    Chama o endpoint que atualiza a tabela no servidor.
+
+    :param url_atualiza: URL completa de atualiza_status.php
+    :return: (sucesso, mensagem)
+    """
     url_atualiza = url_atualiza.strip()
     logger.info("Chamando endpoint: %s", url_atualiza)
 
@@ -55,6 +62,7 @@ def chamar_atualiza_status(url_atualiza: str) -> tuple[bool, str]:
         texto = resp.text.strip() or "Atualização concluída."
         return True, texto
     except requests.RequestException as exc:
+        logger.exception("Erro ao chamar atualiza_status")
         return False, f"Erro ao atualizar status: {exc}"
 
 
@@ -62,8 +70,8 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
     """
     Gauge com DUAS CORES APENAS:
     - Fundo inteiro vermelho
-    - Barra (valor preenchido) em verde
-    - Marcações (ticks) de 10 em 10
+    - Barra preenchida VERDE ocupando 100% da faixa
+    - Ticks a cada 10
     """
     fig = go.Figure(
         go.Indicator(
@@ -73,17 +81,22 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
             title={"text": title},
             gauge={
                 "axis": {"range": [0, 100], "dtick": 10},
-                # Barra de progresso (verde)
-                "bar": {"color": "#198754"},
-                # Fundo inteiro vermelho
+                # Barra de progresso (verde) ocupa toda a largura
+                "bar": {
+                    "color": "#198754",
+                    "thickness": 1.0,  # 1.0 = ocupa toda a área útil do arco
+                },
+                # Fundo 100% vermelho
                 "steps": [
                     {"range": [0, 100], "color": "#8B0000"},
                 ],
+                "borderwidth": 0,
             },
         )
     )
+
     fig.update_layout(
-        margin=dict(l=20, r=20, t=40, b=10),
+        margin=dict(l=10, r=10, t=40, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
         font={"color": "white"},
     )
@@ -91,6 +104,7 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
 
 
 def color_status(val: str) -> str:
+    """Aplica cor na coluna Status da tabela."""
     if isinstance(val, str) and val.lower().startswith("funcionando"):
         return "background-color:#198754;color:white;"
     return "background-color:#842029;color:white;"
@@ -108,7 +122,8 @@ def main() -> None:
 
     # URLs
     url_monitoramento = st.text_input(
-        "URL da página de monitoramento:", "http://45.71.160.173/monitoramento/"
+        "URL da página de monitoramento:",
+        "http://45.71.160.173/monitoramento/",
     )
     url_atualiza_status = st.text_input(
         "URL de atualização de status:",
@@ -212,7 +227,10 @@ def main() -> None:
     # ---------------------------------------------------------------------
 
     if st.session_state["ultima_msg_atualiza"]:
-        st.info(f"Mensagem da última atualização: {st.session_state['ultima_msg_atualiza']}")
+        st.info(
+            f"Mensagem da última atualização: "
+            f"{st.session_state['ultima_msg_atualiza']}"
+        )
 
     # ---------------------------------------------------------------------
     # TABELA COLORIDA
@@ -225,7 +243,9 @@ def main() -> None:
     df_exibe = df.copy()
 
     if filtro.strip():
-        df_exibe = df_exibe[df_exibe["Carro"].str.contains(filtro, case=False, na=False)]
+        df_exibe = df_exibe[
+            df_exibe["Carro"].str.contains(filtro, case=False, na=False)
+        ]
 
     if "Último Acesso" in df_exibe.columns:
         df_exibe = df_exibe.sort_values("Último Acesso", ascending=False)
