@@ -60,11 +60,10 @@ def chamar_atualiza_status(url_atualiza: str) -> tuple[bool, str]:
 
 def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
     """
-    Cria um gauge com faixas:
-    0–25   -> verde
-    25–65  -> amarelo
-    65–100 -> vermelho
-    E marcações (ticks) de 10 em 10.
+    Gauge com DUAS CORES APENAS:
+    - Fundo inteiro vermelho
+    - Barra (valor preenchido) em verde
+    - Marcações (ticks) de 10 em 10
     """
     fig = go.Figure(
         go.Indicator(
@@ -74,11 +73,11 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
             title={"text": title},
             gauge={
                 "axis": {"range": [0, 100], "dtick": 10},
-                "bar": {"color": "white"},
+                # Barra de progresso (verde)
+                "bar": {"color": "#198754"},
+                # Fundo inteiro vermelho
                 "steps": [
-                    {"range": [0, 25], "color": "#198754"},    # verde
-                    {"range": [25, 65], "color": "#FFC107"},   # amarelo
-                    {"range": [65, 100], "color": "#8B0000"},  # vermelho
+                    {"range": [0, 100], "color": "#8B0000"},
                 ],
             },
         )
@@ -187,26 +186,26 @@ def main() -> None:
 
     col1, col2, col3 = st.columns(3)
 
-    # 1) Total Monitorado em Relação à Frota
+    # 1) Carros Funcionando
     col1.plotly_chart(
-        make_gauge_percent("Total Monitorado em Relação à Frota", pct_total_meta),
-        use_container_width=True,
-    )
-    col1.write(f"{total} de {META_TOTAL_CARROS} veículos (frota)")
-
-    # 2) Carros Funcionando
-    col2.plotly_chart(
         make_gauge_percent("Carros Funcionando", pct_funcionando),
         use_container_width=True,
     )
-    col2.write(f"{funcionando} de {total} veículos")
+    col1.write(f"{funcionando} de {total} veículos")
 
-    # 3) Carros Inoperantes
-    col3.plotly_chart(
+    # 2) Carros Inoperantes
+    col2.plotly_chart(
         make_gauge_percent("Carros Inoperantes", pct_nok),
         use_container_width=True,
     )
-    col3.write(f"{nao_funcionando} de {total} veículos")
+    col2.write(f"{nao_funcionando} de {total} veículos")
+
+    # 3) Total Monitorado em Relação à Frota
+    col3.plotly_chart(
+        make_gauge_percent("Total Monitorado em Relação à Frota", pct_total_meta),
+        use_container_width=True,
+    )
+    col3.write(f"{total} de {META_TOTAL_CARROS} veículos (frota)")
 
     # ---------------------------------------------------------------------
     # MENSAGEM DO SERVIDOR
