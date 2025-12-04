@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+from typing import Dict
 
 import pandas as pd
 import pytz
@@ -104,12 +105,50 @@ def make_gauge_percent(title: str, value_percent: float) -> go.Figure:
 
 
 def color_status(val: str) -> str:
-    """Aplica cor na coluna Status da tabela com tons mais vivos."""
+    """Cores originais da tabela (verde e vermelho mais sóbrios)."""
     if isinstance(val, str) and val.lower().startswith("funcionando"):
-        # Verde bem vivo, texto escuro para contraste
-        return "background-color:#00FF57;color:#000000;font-weight:bold;"
-    # Vermelho vivo para inoperantes
-    return "background-color:#FF0000;color:white;font-weight:bold;"
+        return "background-color:#198754;color:white;font-weight:bold;"
+    return "background-color:#842029;color:white;font-weight:bold;"
+
+
+def atualizar_historico_operantes(valor_atual: int, tz: pytz.BaseTzInfo) -> None:
+    """
+    Atualiza o histórico diário de veículos operantes.
+
+    Regra:
+    - Usa a data de hoje (no fuso America/Sao_Paulo).
+    - Se já existir valor para o dia, guarda apenas o MAIOR.
+    """
+    hoje = datetime.datetime.now(tz).date()
+    chave = hoje.isoformat()  # 'YYYY-MM-DD'
+
+    if "historico_operantes" not in st.session_state:
+        st.session_state["historico_operantes"] = {}
+
+    historico: Dict[str, int] = st.session_state["historico_operantes"]
+
+    if chave in historico:
+        historico[chave] = max(historico[chave], valor_atual)
+    else:
+        historico[chave] = valor_atual
+
+    st.session_state["historico_operantes"] = historico
+
+
+def construir_dataframe_historico() -> pd.DataFrame | None:
+    """Monta um DataFrame a partir do histórico de veículos operantes por dia."""
+    historico = st.session_state.get("historico_operantes")
+    if not historico:
+        return None
+
+    df_hist = pd.DataFrame(
+        [
+            {"Data": pd.to_datetime(dia), "Veículos Funcionando": valor}
+            for dia, valor in sorted(historico.items())
+        ]
+    )
+    df_hist = df_hist.sort_values("Data")
+    return df_hist
 
 
 # -------------------------------------------------------------------------
@@ -119,8 +158,8 @@ def color_status(val: str) -> str:
 def main() -> None:
     st.set_page_config(page_title="Monitoramento Wi-Fi", page_icon="🚍", layout="wide")
 
-    st.title("Monitoramento de Carros - Wi-Fi")
-    st.write("Dashboard para consulta e atualização do monitoramento dos dispositivos Wi-Fi.")
+    st.title("🚍 Monitoramento de Carros - Wi-Fi")
+    st.write("Dashboard para consulta e atualização do monitoramento de carros via Wi-Fi.")
 
     # URLs
     url_monitoramento = st.text_input(
@@ -141,6 +180,8 @@ def main() -> None:
         st.session_state["ultima_msg_atualiza"] = ""
     if "ultima_execucao" not in st.session_state:
         st.session_state["ultima_execucao"] = None
+    if "historico_operantes" not in st.session_state:
+        st.session_state["historico_operantes"] = {}
 
     # Botão principal
     if st.button("Atualizar dados agora"):
@@ -166,7 +207,12 @@ def main() -> None:
                 st.session_state["resumo"] = resumo
 
                 tz = pytz.timezone("America/Sao_Paulo")
-                st.session_state["ultima_execucao"] = datetime.datetime.now(tz)
+                agora_tz = datetime.datetime.now(tz)
+                st.session_state["ultima_execucao"] = agora_tz
+
+                # Atualiza histórico de veículos funcionando (operantes) por dia
+                total_funcionando = resumo.get("total_funcionando", 0) or 0
+                atualizar_historico_operantes(total_funcionando, tz)
 
                 st.success("Dados carregados com sucesso.")
             except MonitoramentoError as exc:
@@ -220,6 +266,21 @@ def main() -> None:
         use_container_width=True,
     )
     col3.write(f"{total} de {META_TOTAL_CARROS} veículos (frota)")
+
+    # ---------------------------------------------------------------------
+    # GRÁFICO DE LINHA – HISTÓRICO DE VEÍCULOS FUNCIONANDO
+    # ---------------------------------------------------------------------
+
+    st.subheader("Histórico diário de veículos funcionando (maior valor por dia)")
+
+    df_hist = construir_dataframe_historico()
+    if df_hist is not None and not df_hist.empty:
+        # Usa Data como eixo x
+        df_hist_plot = df_hist.set_index("Data")
+        st.line_chart(df_hist_plot, height=300)
+    else:
+        st.info("Ainda não há histórico suficiente para exibir o gráfico. "
+                "Clique em 'Atualizar dados agora' para começar a registrar.")
 
     # ---------------------------------------------------------------------
     # MENSAGEM DO SERVIDOR
