@@ -158,8 +158,8 @@ def construir_dataframe_historico() -> pd.DataFrame | None:
 def main() -> None:
     st.set_page_config(page_title="Monitoramento Wi-Fi", page_icon="🚍", layout="wide")
 
-    st.title("🚍 Monitoramento de Carros - Wi-Fi")
-    st.write("Dashboard para consulta e atualização do monitoramento de carros via Wi-Fi.")
+    st.title("Monitoramento de Carros - Wi-Fi")
+    st.write("Dashboard para consulta e atualização do monitoramento de dispositivos Wi-Fi.")
 
     # URLs
     url_monitoramento = st.text_input(
