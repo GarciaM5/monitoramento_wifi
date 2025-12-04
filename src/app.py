@@ -111,44 +111,110 @@ def color_status(val: str) -> str:
     return "background-color:#842029;color:white;font-weight:bold;"
 
 
-def atualizar_historico_operantes(valor_atual: int, tz: pytz.BaseTzInfo) -> None:
+def atualizar_historico(val_funcionando: int, val_total: int, tz: pytz.BaseTzInfo) -> None:
     """
-    Atualiza o histórico diário de veículos operantes.
+    Atualiza o histórico diário de:
+    - veículos funcionando
+    - total monitorado
 
     Regra:
-    - Usa a data de hoje (no fuso America/Sao_Paulo).
-    - Se já existir valor para o dia, guarda apenas o MAIOR.
+    - Usa a data de hoje (no fuso America/Sao_Paulo)
+    - Se já existir valor para o dia, guarda apenas o MAIOR
     """
-    hoje = datetime.datetime.now(tz).date()
-    chave = hoje.isoformat()  # 'YYYY-MM-DD'
+    hoje = datetime.datetime.now(tz).date().isoformat()
 
-    if "historico_operantes" not in st.session_state:
-        st.session_state["historico_operantes"] = {}
+    if "historico_funcionando" not in st.session_state:
+        st.session_state["historico_funcionando"] = {}
+    if "historico_total" not in st.session_state:
+        st.session_state["historico_total"] = {}
 
-    historico: Dict[str, int] = st.session_state["historico_operantes"]
+    hist_f: Dict[str, int] = st.session_state["historico_funcionando"]
+    hist_t: Dict[str, int] = st.session_state["historico_total"]
 
-    if chave in historico:
-        historico[chave] = max(historico[chave], valor_atual)
+    # Funcionando
+    if hoje in hist_f:
+        hist_f[hoje] = max(hist_f[hoje], val_funcionando)
     else:
-        historico[chave] = valor_atual
+        hist_f[hoje] = val_funcionando
 
-    st.session_state["historico_operantes"] = historico
+    # Total monitorado
+    if hoje in hist_t:
+        hist_t[hoje] = max(hist_t[hoje], val_total)
+    else:
+        hist_t[hoje] = val_total
+
+    st.session_state["historico_funcionando"] = hist_f
+    st.session_state["historico_total"] = hist_t
 
 
 def construir_dataframe_historico() -> pd.DataFrame | None:
-    """Monta um DataFrame a partir do histórico de veículos operantes por dia."""
-    historico = st.session_state.get("historico_operantes")
-    if not historico:
+    """Monta um DataFrame a partir do histórico de veículos por dia."""
+    hist_f = st.session_state.get("historico_funcionando")
+    hist_t = st.session_state.get("historico_total")
+
+    if not hist_f or not hist_t:
         return None
 
-    df_hist = pd.DataFrame(
-        [
-            {"Data": pd.to_datetime(dia), "Veículos Funcionando": valor}
-            for dia, valor in sorted(historico.items())
-        ]
+    datas = sorted(hist_f.keys())
+
+    df = pd.DataFrame({
+        "Data": pd.to_datetime(datas),
+        "Funcionando": [hist_f[d] for d in datas],
+        "Total": [hist_t[d] for d in datas],
+    })
+
+    return df.sort_values("Data")
+
+
+def make_history_chart(df_hist: pd.DataFrame) -> go.Figure:
+    """
+    Cria um gráfico de linha com duas séries:
+    - Total monitorado (azul)
+    - Funcionando (verde)
+    Com rótulos de valor sempre visíveis.
+    """
+    fig = go.Figure()
+
+    # Total monitorado
+    fig.add_trace(go.Scatter(
+        x=df_hist["Data"],
+        y=df_hist["Total"],
+        mode="lines+markers+text",
+        text=df_hist["Total"],
+        textposition="top center",
+        name="Total Monitorado",
+        line=dict(color="#1f77b4", width=3),
+        marker=dict(size=8, color="#1f77b4"),
+    ))
+
+    # Funcionando
+    fig.add_trace(go.Scatter(
+        x=df_hist["Data"],
+        y=df_hist["Funcionando"],
+        mode="lines+markers+text",
+        text=df_hist["Funcionando"],
+        textposition="top center",
+        name="Funcionando",
+        line=dict(color="#2ca02c", width=3),
+        marker=dict(size=8, color="#2ca02c"),
+    ))
+
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis_title="Data",
+        yaxis_title="Quantidade de Veículos",
+        hovermode="x unified",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+        ),
     )
-    df_hist = df_hist.sort_values("Data")
-    return df_hist
+
+    return fig
 
 
 # -------------------------------------------------------------------------
@@ -180,8 +246,10 @@ def main() -> None:
         st.session_state["ultima_msg_atualiza"] = ""
     if "ultima_execucao" not in st.session_state:
         st.session_state["ultima_execucao"] = None
-    if "historico_operantes" not in st.session_state:
-        st.session_state["historico_operantes"] = {}
+    if "historico_funcionando" not in st.session_state:
+        st.session_state["historico_funcionando"] = {}
+    if "historico_total" not in st.session_state:
+        st.session_state["historico_total"] = {}
     if "filtro_status" not in st.session_state:
         st.session_state["filtro_status"] = "Todos"
 
@@ -212,9 +280,10 @@ def main() -> None:
                 agora_tz = datetime.datetime.now(tz)
                 st.session_state["ultima_execucao"] = agora_tz
 
-                # Atualiza histórico de veículos funcionando (operantes) por dia
-                total_funcionando = resumo.get("total_funcionando", 0) or 0
-                atualizar_historico_operantes(total_funcionando, tz)
+                # Atualiza histórico diário (funcionando e total)
+                total = resumo.get("total_carros", 0) or 0
+                funcionando = resumo.get("total_funcionando", 0) or 0
+                atualizar_historico(funcionando, total, tz)
 
                 st.success("Dados carregados com sucesso.")
             except MonitoramentoError as exc:
@@ -270,31 +339,15 @@ def main() -> None:
     col3.write(f"{total} de {META_TOTAL_CARROS} veículos (frota)")
 
     # ---------------------------------------------------------------------
-    # FILTRO RÁPIDO POR STATUS (EMULA “CLIQUE NO GAUGE”)
+    # GRÁFICO DE LINHA – HISTÓRICO (TOTAL x FUNCIONANDO)
     # ---------------------------------------------------------------------
 
-    st.subheader("Filtro rápido por status")
-
-    filtro_status = st.radio(
-        "Selecione o conjunto de veículos a exibir na tabela:",
-        ("Todos", "Somente funcionando", "Somente inoperantes"),
-        index=("Todos", "Somente funcionando", "Somente inoperantes").index(
-            st.session_state["filtro_status"]
-        ),
-        horizontal=True,
-    )
-    st.session_state["filtro_status"] = filtro_status
-
-    # ---------------------------------------------------------------------
-    # GRÁFICO DE LINHA – HISTÓRICO DE VEÍCULOS FUNCIONANDO
-    # ---------------------------------------------------------------------
-
-    st.subheader("Histórico diário de veículos funcionando (maior valor por dia)")
+    st.subheader("Histórico diário (Total x Funcionando) – maior valor por dia")
 
     df_hist = construir_dataframe_historico()
     if df_hist is not None and not df_hist.empty:
-        df_hist_plot = df_hist.set_index("Data")
-        st.line_chart(df_hist_plot, height=300)
+        fig_hist = make_history_chart(df_hist)
+        st.plotly_chart(fig_hist, use_container_width=True)
     else:
         st.info(
             "Ainda não há histórico suficiente para exibir o gráfico. "
@@ -302,27 +355,28 @@ def main() -> None:
         )
 
     # ---------------------------------------------------------------------
-    # MENSAGEM DO SERVIDOR
-    # ---------------------------------------------------------------------
-
-    if st.session_state["ultima_msg_atualiza"]:
-        st.info(
-            f"Mensagem da última atualização: "
-            f"{st.session_state['ultima_msg_atualiza']}"
-        )
-
-    # ---------------------------------------------------------------------
-    # TABELA COLORIDA
+    # TABELA COLORIDA + FILTROS (TUDO JUNTO)
     # ---------------------------------------------------------------------
 
     st.subheader("Tabela de Carros")
 
-    filtro_texto = st.text_input("Filtrar por carro:")
+    col_filtro_status, col_filtro_texto = st.columns([2, 3])
+
+    filtro_status = col_filtro_status.radio(
+        "Filtro rápido por status:",
+        ("Todos", "Somente funcionando", "Somente inoperantes"),
+        index=("Todos", "Somente funcionando", "Somente inoperantes").index(
+            st.session_state["filtro_status"]
+        ),
+        horizontal=False,
+    )
+    st.session_state["filtro_status"] = filtro_status
+
+    filtro_texto = col_filtro_texto.text_input("Filtrar por carro (contém):")
 
     df_exibe = df.copy()
 
     # Aplica filtro de status conforme seleção
-    filtro_status = st.session_state.get("filtro_status", "Todos")
     if "Status" in df_exibe.columns:
         status_series = df_exibe["Status"].astype(str).str.lower()
         if filtro_status == "Somente funcionando":
@@ -343,6 +397,16 @@ def main() -> None:
 
     styled = df_exibe.style.applymap(color_status, subset=["Status"])
     st.dataframe(styled, use_container_width=True, height=500)
+
+    # ---------------------------------------------------------------------
+    # MENSAGEM DO SERVIDOR
+    # ---------------------------------------------------------------------
+
+    if st.session_state["ultima_msg_atualiza"]:
+        st.info(
+            f"Mensagem da última atualização: "
+            f"{st.session_state['ultima_msg_atualiza']}"
+        )
 
     # ---------------------------------------------------------------------
     # RODAPÉ / AUTORIA
